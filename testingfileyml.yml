@@ -1,0 +1,59 @@
+---
+- name: Let's copy our executable script to remote location, execute script and get result back.
+  hosts: all
+  become: true
+  tasks:
+  - name: Transfer executable script script copied to jump server
+    copy:
+      src: file/EP2430.20170515-235343-682.gold.tar
+      dest: /tmp
+ 
+  - name: Extract  EP2450.20190827-065040-455.gold.tar into app/EP2Source/EP2_CORE
+    ansible.builtin.unarchive:
+    src: /tmp/EP2450.20190827-065040-455.gold.tar
+    dest: app/EP2Source/EP2_CORE
+
+ - name: Delete the old CSV file if present
+    state: absent
+    path: "/app/EP2Source/EP2_CORE_result{{ ansible_hostname }}.csv"
+
+ - name: Execute the script
+    command: sh /app/EP2Source/EP2_CORE/EP2_Driver.sh >> "/app/EP2Source/EP2_CORE_result{{ ansible_hostname }}.csv"
+    register: resultupdate
+
+ – name: find the output file
+    shell: (cd /app/EP2Source/EP2_CORE; find collect*.csv)
+    register: files_to_copy
+    – debug:
+        var: files_to_copy
+ – name: Fetch the file from remote to local
+    fetch: src=/app/EP2Source/EP2_CORE/{{ item }} dest=/home/system/ mode=0777 flat=yes
+    with_items: “{{ files_to_copy.stdout_lines }}”
+
+ - name: Delete EP2.tar from /tmp file
+    state: absent
+    path: "{{ item.path }}"
+    with_items:
+     "{{ files_to_delete.files }}"
+
+rescue:
+        - fail:
+            msg: 'Error running tasks'
+
+## Finally sending mail
+
+ - mail:
+    host: smtp.gmail.com
+    port: 587
+    username: syadmin@gmail.com
+    password: !@123456Passme
+    subject: Ansible-report EP2 update
+    body: 'System {{ ansible_hostname }} has been successfully provisioned.'
+    from: Client@noci.net
+    to: user1@noci.net,user2@noci.net
+    cc: sysadmin@noci.net
+    attach: /app/EP2Source/EP2_CORE_result{{ ansible_hostname }}.csv
+    charset: utf8
+   delegate_to: localhost
+
+
